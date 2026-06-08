@@ -271,12 +271,7 @@ int main(int argc, char *argv[]) { // Tämä on "Main Thread", eli "kuningatar" 
                     }
                 }
           
-                // Viimeinen kirjoitetaan taas silmukan/koiden ulkopuolella.
-                if (iPreviousCharacterCount > 0) {
-                    fwrite(&iPreviousCharacterCount, sizeof(int), 1, stdout);
-                    fwrite(&cPreviousCharacter, sizeof(char), 1, stdout);
-                }
-
+                
                 // Vapautetaan käytetty muisti
                 for (int i = 0; i < iAmountOfWork; i++) {
                     free(allCharacterInfos[i].info);
@@ -287,6 +282,12 @@ int main(int argc, char *argv[]) { // Tämä on "Main Thread", eli "kuningatar" 
             }
                 // Suljetaan aina avattu tiedosto
                 close(iFileDescriptor);   
+            }
+
+            // Viimeinen kirjoitetaan taas silmukan/koiden ulkopuolella.
+            if (iPreviousCharacterCount > 0) {
+                fwrite(&iPreviousCharacterCount, sizeof(int), 1, stdout);
+                fwrite(&cPreviousCharacter, sizeof(char), 1, stdout);
             }
 
     } else { // Ei hyväksyttävä määrä syötteitä
