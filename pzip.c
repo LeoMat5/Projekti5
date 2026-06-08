@@ -281,7 +281,7 @@ int main(int argc, char *argv[]) { // Tämä on "Main Thread", eli "kuningatar" 
                 currentCharacterInfos = NULL;
             }
                 // Suljetaan aina avattu tiedosto
-                munmapp(pMappedFile, fileSize);
+                munmap(pMappedFile, fileSize);
                 close(iFileDescriptor);   
             }
 
