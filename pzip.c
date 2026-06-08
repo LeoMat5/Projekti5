@@ -231,7 +231,7 @@ int main(int argc, char *argv[]) { // Tämä on "Main Thread", eli "kuningatar" 
                 order.workPieces = workPieces;
                 order.characterInfos = allCharacterInfos;
 
-                // Määritellään työntekijöitä.
+                // Määritellään töitä ja työntekijöitä.
                 for (int i = 0; i < iAmountOfWorkersAvailable; i++) {
                     workInfo[i].pFile = pMappedFile;
                     workInfo[i].order = &order;
