@@ -63,16 +63,16 @@ typedef struct {// https://pages.cs.wisc.edu/%7Eremzi/OSTEP/threads-api.pdf sivu
 void *tWorker(void *arg) {
     WorkInformation *workInfo = arg; // https://pages.cs.wisc.edu/%7Eremzi/OSTEP/threads-api.pdf sivu 3
     PieceOfWork workPiece;
-    CharacterInfos *characterInfos = NULL;
+    CharacterInfos *currentCharacterInfos = NULL;
     char *pFile = workInfo->pFile;
     size_t startPoint = 0;
     size_t endPoint = 0;
     int iWorkPieceToBeHandled = 0;
     int iWorkAvailable = 1;
-    char cCurrentCharacter;
-    char cPreviousCharacter = "\0";
+    char cPreviousCharacter = '\0';
     int iCharacterCount = 0;
     int iAmountOfWork = 0;
+    char cCurrentCharacter = '\0';
     iAmountOfWork = workInfo->order->iAmountOfWork;
 
     // Otetaan työ työntekijälle lukkoa käyttäen, ettei "race condition" tapahdu.
@@ -90,10 +90,14 @@ void *tWorker(void *arg) {
             workPiece = workInfo->order->workPieces[iWorkPieceToBeHandled];
             startPoint = workPiece.workStartPoint;
             endPoint = workPiece.workEndPoint;
-            characterInfos = &workInfo->order->characterInfos[iWorkPieceToBeHandled];
+            currentCharacterInfos = &workInfo->order->characterInfos[iWorkPieceToBeHandled];
+            iCharacterCount = 0;
+            cPreviousCharacter = '\0';
+            cCurrentCharacter = '\0';
+            
             // Työpalanen haettu, työstetään se. // Tämä on melkein sama kuin minun my-zipissä, mutta vähän muokattuna, koska käytetään mmap() eikä fgetc().
             for (size_t i = startPoint; i < endPoint; i++) {
-                char currentCharacter = pFile[i];
+                cCurrentCharacter = pFile[i];
                 
                 if (iCharacterCount == 0) { // Aloitustilanne.
                     cPreviousCharacter = cCurrentCharacter;
@@ -101,9 +105,10 @@ void *tWorker(void *arg) {
                 } else if (cPreviousCharacter == cCurrentCharacter) {   // Sama merkki
                     iCharacterCount++;                                  // Nostetaan merkkien määrää
                 } else if (cPreviousCharacter != cCurrentCharacter) {   // Eri merkki
-                    characterInfos->info[characterInfos->characterInfoCounter].cSingleCharacter = cPreviousCharacter;
-                    characterInfos->info[characterInfos->characterInfoCounter].iCharacterCount = iCharacterCount;
-                    characterInfos->characterInfoCounter++;
+            
+                    currentCharacterInfos->info[currentCharacterInfos->characterInfoCounter].cSingleCharacter = cPreviousCharacter;
+                    currentCharacterInfos->info[currentCharacterInfos->characterInfoCounter].iCharacterCount = iCharacterCount;
+                    currentCharacterInfos->characterInfoCounter++;
 
                     cPreviousCharacter = cCurrentCharacter;
                     iCharacterCount = 1;
@@ -114,9 +119,9 @@ void *tWorker(void *arg) {
 
             // Viimeinen taas silmukan ulkopuolella.
             if (iCharacterCount > 0) { // Ei käsitellä taaskaan tyhjiä tiedostoja.
-                characterInfos->info[characterInfos->characterInfoCounter].cSingleCharacter = cPreviousCharacter;
-                characterInfos->info[characterInfos->characterInfoCounter].iCharacterCount = iCharacterCount;
-                characterInfos->characterInfoCounter++;
+                currentCharacterInfos->info[currentCharacterInfos->characterInfoCounter].cSingleCharacter = cPreviousCharacter;
+                currentCharacterInfos->info[currentCharacterInfos->characterInfoCounter].iCharacterCount = iCharacterCount;
+                currentCharacterInfos->characterInfoCounter++;
             }
         }
     }
@@ -131,10 +136,17 @@ int main(int argc, char *argv[]) { // Tämä on "Main Thread", eli "kuningatar" 
     pthread_t workers[iAmountOfWorkersAvailable];                   // Lista työntekijöistäni.
     WorkInformation workInfo[iAmountOfWorkersAvailable];            // Työntekijöiden töiden tiedot. Tässä on olo kuin jollain projektipäälliköllä.
     WorkingOrder order;                                             // Työjärjestys jonoa varten.
-    CharacterInfos *characterInfos = NULL;
+    CharacterInfos *allCharacterInfos = NULL;
+    CharacterInfos *currentCharacterInfos = NULL; 
     int iFileDescriptor = -1;                                       // -1 = virhe, käytän sitä alustusarvona, jos se toimii testauksessa.
     struct stat sfileInformation;
     char *pMappedFile = NULL;
+    char cSingleCharacter;
+    char cPreviousCharacter = '\0';                                 
+    int iSingleCharacterCount = 0;
+    int iPreviousCharacterCount = 0;
+    size_t workStart = 0;
+    size_t workEnd = 0;
     size_t fileSize = 0;                                         
     size_t workSize = 0;
     size_t workPiecesPerWorker = 5;                                 // Tarvitsee tämmöisen kertoimen, jotta työtä jakaessa ei ole vain esim. yksi työpalanen per työntekijä, jolloin nopeammat eivät voi ottaa uusia.                                        
@@ -172,43 +184,52 @@ int main(int argc, char *argv[]) { // Tämä on "Main Thread", eli "kuningatar" 
                 }
 
                 workSize = (fileSize + iAmountOfWork - 1) / iAmountOfWork; // Jakojäännöksen poisto.
+                iAmountOfWork = (fileSize + workSize - 1) / workSize;      // Korjataan iAmountOfWork, muuten malloc epäonnistuu.
                 PieceOfWork workPieces[iAmountOfWork];                     // Töiden paloitteluun. Ei oikein voi määritellä aiemmin järkevästi.
 
                 // Jaetaan nyt työpalaset niiden listaan, josta sitten jonossa niitä haetaan.
                 for (int i = 0; i < iAmountOfWork; i++) {
-                    workPieces[i].workStartPoint = i * workSize; // i on askeleen määrä ja workSize on askeleen koko.
-                    workPieces[i].workEndPoint = (i + 1) * workSize; // (i + 1) on seuraavan palan alku.
-                }
+                    workStart = (size_t)i * workSize;
+                    workEnd = workStart + workSize;
 
-                // Viimeisen askeleen erillinen käsittely, koska se on parempi määritellä fileSizen loppuun.
-                int lastWorkPiece = iAmountOfWork - 1;
-                workPieces[lastWorkPiece].workStartPoint = lastWorkPiece * workSize; // i on askeleen määrä ja workSize on askeleen koko.
-                workPieces[lastWorkPiece].workEndPoint = fileSize;
+                    if (workEnd > fileSize) { // Testitulosteissa ilmeni, että workEnd voi kasvaa liian suureksi, joten laastari.
+                        workEnd = fileSize;
+                    }
+
+                    workPieces[i].workStartPoint = workStart;
+                    workPieces[i].workEndPoint = workEnd;
+                }
 
                 // Lukon alustus:
                 pthread_mutex_init(&order.mutualExclusionLock, NULL);
-
-                // Tallennetaan structiin saadut tiedot.
-                order.iAmountOfWork = iAmountOfWork;
-                order.iNextPieceOfWork = 0;
-                order.workPieces = workPieces;
                 
                 // Varataan tarvittava muisti
-                if ((characterInfos = malloc(sizeof(CharacterInfos) * iAmountOfWork)) == NULL) {
-                    fprintf(stderr, "malloc failed\n");
+                if ((allCharacterInfos = malloc(sizeof(CharacterInfos) * iAmountOfWork)) == NULL) {
+                    fprintf(stderr, "malloc failed 1\n");
                     exit(1);
                 }
 
                 for (int i = 0; i < iAmountOfWork; i++) {
                     workPieceSize = workPieces[i].workEndPoint-workPieces[i].workStartPoint;
-
-                    if ((characterInfos[i].info = malloc(sizeof(CharacterInfo) * workPieceSize)) == NULL) {
-                    fprintf(stderr, "malloc failed\n");
-                    exit(1);
+                    if (workPieceSize == 0) { // Tyhjät palaset
+                        allCharacterInfos[i].info = NULL;
+                        allCharacterInfos[i].characterInfoCounter = 0;
+                        continue;
                     }
 
-                    characterInfos[i].characterInfoCounter = 0;
+                    if ((allCharacterInfos[i].info = malloc(sizeof(CharacterInfo) * workPieceSize)) == NULL) {
+                        fprintf(stderr, "malloc failed 2\n");
+                        exit(1);
+                    }
+
+                    allCharacterInfos[i].characterInfoCounter = 0;
                 }
+
+                // Tallennetaan structiin saadut tiedot.
+                order.iAmountOfWork = iAmountOfWork;
+                order.iNextPieceOfWork = 0;
+                order.workPieces = workPieces;
+                order.characterInfos = allCharacterInfos;
 
                 // Määritellään työntekijöitä.
                 for (int i = 0; i < iAmountOfWorkersAvailable; i++) {
@@ -218,17 +239,51 @@ int main(int argc, char *argv[]) { // Tämä on "Main Thread", eli "kuningatar" 
                     pthread_create(&workers[i], NULL, tWorker, &workInfo[i]);
                 }
 
-                // Odotetaan töiden valmistumista ja kootaan niiden tuloksista isomman ongelman vastaus. Eli hajota ja hallitse menetelmä.
+                // Odotetaan töiden valmistumista
                 for (int i = 0; i < iAmountOfWorkersAvailable; i++) {
                     pthread_join(workers[i], NULL);
+                }
+            
+                // Kootaan niiden tuloksista isomman ongelman vastaus Main Threadissa. Eli hajota ja hallitse menetelmän loppuosa.
+                for (int i = 0; i < order.iAmountOfWork; i++) {
+                    currentCharacterInfos = &order.characterInfos[i];
+
+                    for (int j = 0; j < currentCharacterInfos->characterInfoCounter; j++) {
+                        cSingleCharacter = currentCharacterInfos->info[j].cSingleCharacter;
+                        iSingleCharacterCount = currentCharacterInfos->info[j].iCharacterCount;
+
+                        
+                        if (iPreviousCharacterCount == 0) {// tässä sama kuin my-zipissä
+                            cPreviousCharacter = cSingleCharacter;
+                            iPreviousCharacterCount = iSingleCharacterCount;
+                        } else if (cPreviousCharacter == cSingleCharacter) {
+                            iPreviousCharacterCount = iPreviousCharacterCount + iSingleCharacterCount;
+                        } else if (cPreviousCharacter != cSingleCharacter) {
+                            fwrite(&iPreviousCharacterCount, sizeof(int), 1, stdout);
+                            fwrite(&cPreviousCharacter, sizeof(char), 1, stdout);
+                        
+                            cPreviousCharacter = cSingleCharacter;
+                            iPreviousCharacterCount = iSingleCharacterCount;
+                        } else {
+                            printf("We shouldn't get here\n"); // Testaukseen tarkoitettu printti.
+                        }
+
+                    }
+                }
+          
+                // Viimeinen kirjoitetaan taas silmukan/koiden ulkopuolella.
+                if (iPreviousCharacterCount > 0) {
+                    fwrite(&iPreviousCharacterCount, sizeof(int), 1, stdout);
+                    fwrite(&cPreviousCharacter, sizeof(char), 1, stdout);
                 }
 
                 // Vapautetaan käytetty muisti
                 for (int i = 0; i < iAmountOfWork; i++) {
-                    free(characterInfos[i].info);
+                    free(allCharacterInfos[i].info);
                 }
-
-                free(characterInfos);
+                free(allCharacterInfos);
+                allCharacterInfos = NULL;
+                currentCharacterInfos = NULL;
             }
                 // Suljetaan aina avattu tiedosto
                 close(iFileDescriptor);   
