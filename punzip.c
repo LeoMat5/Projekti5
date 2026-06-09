@@ -189,6 +189,8 @@ int main(int argc, char *argv[]) { // Tämä on "Main Thread", eli "kuningatar" 
                         unzippedSize = unzippedSize + iSingleCharacterCount;
                     }
 
+                    unzippingResults[i].characterCounter = 0;
+
                     if ((unzippingResults[i].characters = malloc(sizeof(char) * unzippedSize)) == NULL) {
                         fprintf(stderr, "malloc failed 2\n");
                         exit(1);
