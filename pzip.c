@@ -149,7 +149,7 @@ int main(int argc, char *argv[]) { // Tämä on "Main Thread", eli "kuningatar" 
     size_t workEnd = 0;
     size_t fileSize = 0;                                         
     size_t workSize = 0;
-    size_t workPiecesPerWorker = 5;                                 // Tarvitsee tämmöisen kertoimen, jotta työtä jakaessa ei ole vain esim. yksi työpalanen per työntekijä, jolloin nopeammat eivät voi ottaa uusia.                                        
+    int iWorkPiecesPerWorker = 5;                                 // Tarvitsee tämmöisen kertoimen, jotta työtä jakaessa ei ole vain esim. yksi työpalanen per työntekijä, jolloin nopeammat eivät voi ottaa uusia.                                        
     int iAmountOfWork = 0;
     size_t workPieceSize = 0;
     
@@ -174,10 +174,10 @@ int main(int argc, char *argv[]) { // Tämä on "Main Thread", eli "kuningatar" 
                 workSize = fileSize/iAmountOfWorkersAvailable;  // Tiedoston koko jaettuna työntekijöiden määrällä. 
 
                 // Kartoitetaan tiedot muistiin.
-                pMappedFile = mmap(NULL, sfileInformation.st_size, PROT_READ, MAP_PRIVATE, iFileDescriptor, 0);  // mmap(, kuten ohjeissa kehotettiin.
+                pMappedFile = mmap(NULL, sfileInformation.st_size, PROT_READ, MAP_PRIVATE, iFileDescriptor, 0);  // mmap(), kuten ohjeissa kehotettiin.
                 
                 // Työmäärä
-                iAmountOfWork = iAmountOfWorkersAvailable * workPiecesPerWorker; // Jotta työjono olisi mahdollinen. Jos ei kerrottaisi, töitä olisi tarjolla 1 per prosessori, jolloin jono olisi turha.
+                iAmountOfWork = iAmountOfWorkersAvailable * iWorkPiecesPerWorker; // Jotta työjono olisi mahdollinen. Jos ei kerrottaisi, töitä olisi tarjolla 1 per prosessori, jolloin jono olisi turha.
 
                 if ((size_t)iAmountOfWork > fileSize) {
                     iAmountOfWork = (int)fileSize;
@@ -280,16 +280,16 @@ int main(int argc, char *argv[]) { // Tämä on "Main Thread", eli "kuningatar" 
                 allCharacterInfos = NULL;
                 currentCharacterInfos = NULL;
             }
-                // Suljetaan aina avattu tiedosto
-                munmap(pMappedFile, fileSize);
-                close(iFileDescriptor);   
-            }
+            // Suljetaan aina avattu tiedosto
+            munmap(pMappedFile, fileSize);
+            close(iFileDescriptor);   
+        }
 
-            // Viimeinen kirjoitetaan taas silmukan/koiden ulkopuolella.
-            if (iPreviousCharacterCount > 0) {
-                fwrite(&iPreviousCharacterCount, sizeof(int), 1, stdout);
-                fwrite(&cPreviousCharacter, sizeof(char), 1, stdout);
-            }
+        // Viimeinen kirjoitetaan taas silmukan/koiden ulkopuolella.
+        if (iPreviousCharacterCount > 0) {
+            fwrite(&iPreviousCharacterCount, sizeof(int), 1, stdout);
+            fwrite(&cPreviousCharacter, sizeof(char), 1, stdout);
+        }
 
     } else { // Ei hyväksyttävä määrä syötteitä
         printf("pzip: file1 [file2 ...]\n");
