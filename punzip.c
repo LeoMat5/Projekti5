@@ -197,7 +197,7 @@ int main(int argc, char *argv[]) { // Tämä on "Main Thread", eli "kuningatar" 
                     }
                 }
                 
-           // Tallennetaan structiin saadut tiedot.
+                // Tallennetaan structiin saadut tiedot.
                 order.iAmountOfWork = iAmountOfWork;
                 order.iNextPieceOfWork = 0;
                 order.workPieces = workPieces;
@@ -219,7 +219,6 @@ int main(int argc, char *argv[]) { // Tämä on "Main Thread", eli "kuningatar" 
                 // Kootaan niiden tuloksista isomman ongelman vastaus Main Threadissa. Eli hajota ja hallitse menetelmän loppuosa.
                 for (int i = 0; i < order.iAmountOfWork; i++) {
                     fwrite(order.unzippingResults[i].characters, sizeof(char), order.unzippingResults[i].characterCounter, stdout);
-
                 }
                 
                 // Vapautetaan käytetty muisti
@@ -229,7 +228,6 @@ int main(int argc, char *argv[]) { // Tämä on "Main Thread", eli "kuningatar" 
 
                 free(unzippingResults);
                 unzippingResults = NULL;
-                // currentUnzippingResults = NULL;
             }
             // Suljetaan aina avattu tiedosto
             munmap(pMappedFile, fileSize);
